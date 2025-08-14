@@ -10,7 +10,7 @@ import AVFoundation
 import AVKit
 
 //MARK: - LocalVideo
-private struct LocalVideo {
+struct LocalVideo {
   let url: URL
   var duration: TimeInterval?  // filled in asynchronously
 }
@@ -21,6 +21,7 @@ class CameraViewController: UIViewController {
   
   //MARK: Constants
   private let maxVideoDuration = 30.0
+  private let analysisFPS = 15.0
   private let imageCellSize = CGSize(width: 100, height: 100)
   
   // MARK:  properties
@@ -28,12 +29,17 @@ class CameraViewController: UIViewController {
   private let sessionQueue = DispatchQueue(label: "camera.session.queue")
   private var videoDeviceInput: AVCaptureDeviceInput?
   private let movieOutput = AVCaptureMovieFileOutput()
-  private var previewLayer: AVCaptureVideoPreviewLayer!
+  private var videoPreviewView = VideoPreviewView()
   
+  private var isRecording: Bool = false
   private var isObservingPhotoLibrary = false
   private var isSessionConfigured = false
   private var elapsedTime: TimeInterval = 0.0
   private var timer: Timer?
+  
+  // Video Manager
+  let videoManager = VideoManager()
+  private let analyzer = SimpleAnalyzer()
   
   // MARK: grid state
   private var localVideos: [LocalVideo] = []
@@ -51,38 +57,38 @@ class CameraViewController: UIViewController {
   override func viewDidLoad() {
     super.viewDidLoad()
     view.backgroundColor = .black
-    
-    // Preview layer
-    previewLayer = AVCaptureVideoPreviewLayer(session: session)
-    previewLayer.videoGravity = .resizeAspectFill
-    view.layer.insertSublayer(previewLayer, at: 0)
-    
+        
     recordButton.addTarget(self, action: #selector(toggleRecording), for: .touchUpInside)
     
     // Prepare permissions + session
     checkPermissionsAndConfigure()
-    
+        
     configureSavedVideosCollectionView()
-    
     configureRecordBoundingBox()
-
     configureProgressBar()
+    configureVideoPreviewView()
     
     reloadLocalVideos()
+    
+    // VideoManager wiring
+    videoManager.delegate = self
+    videoManager.analyzer = analyzer
+    videoManager.maxDuration = maxVideoDuration
+    videoManager.analysisFPS = analysisFPS
+    videoManager.startSession()
+
   } // viewDidLoad
   
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
-    previewLayer.frame = view.bounds
+    videoPreviewView.frame = view.bounds
+    self.configureSavedVideosSize()
     
     //TODO: handle orientation
-    //    // Keep orientation in sync
-    //      if let connection = previewLayer.connection, connection.isVideoOrientationSupported {
-    //          connection.videoOrientation = currentVideoOrientation()
-    //      }
-    
-    self.configureSavedVideosSize()
-  } // viewDidLayoutSubviews
+//    if let c = previewLayer.videoPreviewLayer.connection, c.isVideoOrientationSupported {
+//        c.videoOrientation = currentVideoOrientation()
+//    }
+  }
   
   override func viewWillAppear(_ animated: Bool) {
     super.viewWillAppear(animated)
@@ -92,14 +98,14 @@ class CameraViewController: UIViewController {
         self.session.startRunning()
       }
     }
-  } // viewWillAppear
+  }
   
   override func viewWillDisappear(_ animated: Bool) {
     super.viewWillDisappear(animated)
     sessionQueue.async { [weak self] in
       self?.session.stopRunning()
     }
-  } // viewWillDisappear
+  }
   
   //MARK: -
   private func configureProgressBar(){
@@ -109,9 +115,15 @@ class CameraViewController: UIViewController {
   
   private func configureRecordBoundingBox(){
     recordBoundingBox.layer.cornerRadius = 25
-    recordBoundingBox.layer.borderColor = UIColor.green.cgColor
+    recordBoundingBox.layer.borderColor = UIColor.gray.cgColor
     recordBoundingBox.layer.borderWidth = 2.0
     recordBoundingBox.clipsToBounds = true
+  }
+  
+  private func configureVideoPreviewView(){
+    videoPreviewView.videoPreviewLayer.videoGravity = .resizeAspectFill
+    videoPreviewView.session = videoManager.session
+    view.layer.insertSublayer(videoPreviewView.videoPreviewLayer, at: 0)
   }
   
   private func configureSavedVideosCollectionView(){
@@ -156,36 +168,35 @@ class CameraViewController: UIViewController {
   
   // MARK: - Permissions + Session
   private func checkPermissionsAndConfigure() {
-    let group = DispatchGroup()
-    
-    var cameraGranted = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
-    var micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
-    
-    if !cameraGranted {
-      group.enter()
-      AVCaptureDevice.requestAccess(for: .video) { granted in
-        cameraGranted = granted
-        group.leave()
-      }
-    }
-    
-    if !micGranted {
-      group.enter()
-      AVCaptureDevice.requestAccess(for: .audio) { granted in
-        micGranted = granted
-        group.leave()
-      }
-    }
-    
-    group.notify(queue: .main) { [weak self] in
-      guard let self = self else { return }
-      guard cameraGranted && micGranted else {
-        self.presentPermissionAlert()
-        return
-      }
-      self.configureSession()
-    }
-  } // checkPermissionsAndConfigure
+       let group = DispatchGroup()
+
+       var cameraGranted = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
+       var micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+
+       if !cameraGranted {
+           group.enter()
+           AVCaptureDevice.requestAccess(for: .video) { granted in
+               cameraGranted = granted
+               group.leave()
+           }
+       }
+
+       if !micGranted {
+           group.enter()
+           AVCaptureDevice.requestAccess(for: .audio) { granted in
+               micGranted = granted
+               group.leave()
+           }
+       }
+
+       group.notify(queue: .main) { [weak self] in
+           guard let self = self else { return }
+           guard cameraGranted && micGranted else {
+               self.presentPermissionAlert()
+               return
+           }
+       }
+   } // checkPermissionsAndConfigure
   
   private func presentPermissionAlert() {
     let alert = UIAlertController(
@@ -195,93 +206,46 @@ class CameraViewController: UIViewController {
     )
     alert.addAction(UIAlertAction(title: "OK", style: .default))
     present(alert, animated: true)
-  } // presentPermissionAlert
-  
-  private func configureSession() {
-    guard !isSessionConfigured else { return }
-    sessionQueue.async { [weak self] in
-      guard let self = self else { return }
-      
-      self.session.beginConfiguration()
-      self.session.sessionPreset = .high
-      
-      // Video input (back camera)
-      do {
-        guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
-          print("⚠️ No back camera.")
-          self.session.commitConfiguration()
-          return
-        }
-        let videoInput = try AVCaptureDeviceInput(device: videoDevice)
-        if self.session.canAddInput(videoInput) {
-          self.session.addInput(videoInput)
-          self.videoDeviceInput = videoInput
-        }
-      } catch {
-        print("Video input error: \(error)")
-        self.session.commitConfiguration()
-        return
-      }
-      
-      // Audio input (microphone)
-      do {
-        if let audioDevice = AVCaptureDevice.default(for: .audio) {
-          let audioInput = try AVCaptureDeviceInput(device: audioDevice)
-          if self.session.canAddInput(audioInput) {
-            self.session.addInput(audioInput)
-          }
-        }
-      } catch {
-        print("Audio input error: \(error)")
-      }
-      
-      // Movie output
-      if self.session.canAddOutput(self.movieOutput) {
-        self.session.addOutput(self.movieOutput)
-        self.movieOutput.maxRecordedDuration = CMTime(seconds: maxVideoDuration, preferredTimescale: 1)
-      }
-      
-      // Prefer highest possible stabilization if available
-      if let connection = self.movieOutput.connection(with: .video) {
-        if connection.isVideoStabilizationSupported {
-          connection.preferredVideoStabilizationMode = .auto
-        }
-      }
-      
-      self.session.commitConfiguration()
-      self.isSessionConfigured = true
-      
-      // Start session
-      if !self.session.isRunning {
-        self.session.startRunning()
-      }
-    }
-  } // configureSession
-  
+  }
+    
   // MARK: - Recording
+//  @objc private func toggleRecording() {
+//      if movieOutput.isRecording {
+//          movieOutput.stopRecording()
+//          setRecordingUI(isRecording: false)
+//          stopProgressAnimation()
+//          return
+//      }
+//
+//    //TODO: handle orientation
+////      if let connection = movieOutput.connection(with: .video),
+////         connection.isVideoOrientationSupported {
+////          connection.videoOrientation = currentVideoOrientation()
+////      }
+//
+//      // ⬇️ Write directly into the app's Documents/CapturedVideos
+//      let outputURL = VideoStore.newRecordingURL()
+//
+//      setRecordingUI(isRecording: true)
+//      startProgressAnimation()
+//      movieOutput.startRecording(to: outputURL, recordingDelegate: self)
+//  } // toggleRecording
+  
   @objc private func toggleRecording() {
-      if movieOutput.isRecording {
-          movieOutput.stopRecording()
+    if self.isRecording {
+          videoManager.stopRecording()
           setRecordingUI(isRecording: false)
           stopProgressAnimation()
-          return
+      } else {
+          setRecordingUI(isRecording: true)
+          startProgressAnimation()
+          let url = VideoStore.newRecordingURL()    // your local storage helper
+          videoManager.startRecording(to: url)
       }
-
-    //TODO: handle orientation
-//      if let connection = movieOutput.connection(with: .video),
-//         connection.isVideoOrientationSupported {
-//          connection.videoOrientation = currentVideoOrientation()
-//      }
-
-      // ⬇️ Write directly into the app's Documents/CapturedVideos
-      let outputURL = VideoStore.newRecordingURL()
-
-      setRecordingUI(isRecording: true)
-      startProgressAnimation()
-      movieOutput.startRecording(to: outputURL, recordingDelegate: self)
+    self.isRecording.toggle()
   } // toggleRecording
   
-  private func setRecordingUI(isRecording: Bool) {
+  func setRecordingUI(isRecording: Bool) {
     UIView.transition(with: recordButton, duration: 0.2, options: .transitionCrossDissolve, animations: {
       if isRecording {
         self.recordButton.setImage(UIImage(systemName: "stop.circle.fill"), for: .normal)
@@ -295,11 +259,11 @@ class CameraViewController: UIViewController {
   } // setRecordingUI
   
 
-  private func stopProgressAnimation(){
+  func stopProgressAnimation(){
     progressBar.isHidden = true
   }
   
-  private func startProgressAnimation(){
+  func startProgressAnimation(){
     progressBar.isHidden = false
     elapsedTime = 0.0
     progressBar.progress = 0.0
