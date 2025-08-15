@@ -453,10 +453,6 @@ extension CameraViewController: UICollectionViewDataSource, UICollectionViewDele
       guard gr.state == .began else { return }
       let point = gr.location(in: savedVideosCollection)
       guard let indexPath = savedVideosCollection.indexPathForItem(at: point) else { return }
-
-    
-    let generator = UIImpactFeedbackGenerator(style: .medium)
-    generator.impactOccurred()
     
       let item = localVideos[indexPath.item]
       let cell = savedVideosCollection.cellForItem(at: indexPath)
@@ -487,14 +483,15 @@ extension CameraViewController: UICollectionViewDataSource, UICollectionViewDele
   private func deleteVideo(at indexPath: IndexPath) {
     let url = localVideos[indexPath.item].url
     do {
-      try VideoStore.delete(url)                   // remove from Documents/CapturedVideos
+      try VideoStore.delete(url) // remove from Documents/CapturedVideos
       thumbCache.removeObject(forKey: url as NSURL)
       
       localVideos.remove(at: indexPath.item)
       savedVideosCollection.performBatchUpdates({
         savedVideosCollection.deleteItems(at: [indexPath])
       })
-      
+      SoundPlayer.shared.playSound(sound: .delete)
+      AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
     } catch {
       let alert = UIAlertController(title: "Couldn't Delete",
                                     message: error.localizedDescription,

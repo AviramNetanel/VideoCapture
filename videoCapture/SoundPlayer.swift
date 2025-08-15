@@ -7,7 +7,6 @@
 
 import AVFAudio
 
-
 final class SoundPlayer {
   
   static var shared = SoundPlayer()
@@ -21,7 +20,7 @@ final class SoundPlayer {
       try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
     }
     catch{
-     print("couldn't set sound session!")
+      print("couldn't set sound session!")
     }
   }
   
@@ -47,6 +46,7 @@ final class SoundPlayer {
 
 //MARK: - Sounds
 enum SoundsEnum : String{
-    case click = "click"
-    case shrink = "shrink"
-  }
+  case click = "click"
+  case shrink = "shrink"
+  case delete = "delete"
+}

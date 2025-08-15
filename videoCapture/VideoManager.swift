@@ -315,49 +315,38 @@ extension VideoManager: AVCaptureFileOutputRecordingDelegate {
 
 //MARK: - Save Json
 extension VideoManager {
-    func saveMetadataJSON(alongside videoURL: URL, recordingError: Error?) {
-        // If recording failed, you could skip writing metadata. Here we still write what we have.
-        let asset = AVURLAsset(url: videoURL)
+  private func saveMetadataJSON(alongside videoURL: URL, recordingError: Error?) {
+      let asset = AVURLAsset(url: videoURL)
 
-        Task.detached { [weak self] in
-            guard let self else { return }
-            do {
-                let dur = try await asset.load(.duration)
-                let seconds = CMTimeGetSeconds(dur)
+      Task { // use Task, not detached (inherits context; fine here)
+          do {
+              let dur = try await asset.load(.duration)
+              let seconds = CMTimeGetSeconds(dur)
 
-                // Snpshot metrics (thread-safe)
-                var wasGreen = false
-                var greenSecs: CFTimeInterval = 0
-                await withCheckedContinuation { cont in
-                    self.analysisQueue.async {
-                        wasGreen = self.metrics.wasGreenEver
-                        greenSecs = self.metrics.greenAccum
-                        cont.resume()
-                    }
-                }
+              // ⬇️ Get a snapshot from analysisQueue without mutating captured vars
+              let (wasGreen, greenSecs): (Bool, CFTimeInterval) = await withCheckedContinuation { cont in
+                  analysisQueue.async { [metrics] in
+                      cont.resume(returning: (metrics.wasGreenEver, metrics.greenAccum))
+                  }
+              }
 
-                let meta = RecordingMetadata(
-                    video_filename: videoURL.lastPathComponent,
-                    recording_duration_seconds: seconds,
-                    was_condition_met: wasGreen,
-                    time_in_green_state_seconds: Double(greenSecs)
-                )
+              let meta = RecordingMetadata(
+                  video_filename: videoURL.lastPathComponent,
+                  recording_duration_seconds: seconds,
+                  was_condition_met: wasGreen,
+                  time_in_green_state_seconds: Double(greenSecs)
+              )
 
-                let data = try JSONEncoder().encode(meta)
-                let jsonURL = videoURL.deletingPathExtension().appendingPathExtension("json")
-                try data.write(to: jsonURL, options: .atomic)
-
-                // Optional: notify your VC
-                DispatchQueue.main.async { [weak self] in
-                    // Add a delegate method:
-                    // self?.delegate?.videoManager(self!, didSaveMetadataAt: jsonURL)
-                    print("📝 Saved metadata JSON:", jsonURL.lastPathComponent)
-                }
-            } catch {
-                print("⚠️ Failed to save metadata JSON:", error.localizedDescription)
-            }
-        }
-    } // saveMetadataJSON
+              let data = try JSONEncoder().encode(meta)
+              let jsonURL = videoURL.deletingPathExtension().appendingPathExtension("json")
+              try data.write(to: jsonURL, options: .atomic)
+              print("📝 Saved metadata JSON:", jsonURL.lastPathComponent)
+          } catch {
+              print("⚠️ Failed to save metadata JSON:", error.localizedDescription)
+          }
+      }
+  }
+ // saveMetadataJSON
 
   }
 

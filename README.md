@@ -25,6 +25,7 @@ Things I’d add if I had more time:
 - Handle orientation - after spending some time, I decided to disable it.
 - code separation - split the code into smaller chuncks / files
 - better UX: more sounds, and haptic feedback
+- share / export video
 
 Things I added: 
 - Progress bar - to show the progress during the 30 sec 
