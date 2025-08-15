@@ -6,7 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		E48E316D2E4E503800315A5B /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = E48E315F2E4E503800315A5B /* README.md */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
+		E48E315F2E4E503800315A5B /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		E4C49AC22E4DE8DA0070808E /* videoCapture.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = videoCapture.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -45,6 +50,7 @@
 		E4C49AB92E4DE8DA0070808E = {
 			isa = PBXGroup;
 			children = (
+				E48E315F2E4E503800315A5B /* README.md */,
 				E4C49AC42E4DE8DA0070808E /* videoCapture */,
 				E4C49AC32E4DE8DA0070808E /* Products */,
 			);
@@ -122,6 +128,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E48E316D2E4E503800315A5B /* README.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
