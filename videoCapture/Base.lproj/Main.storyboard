@@ -74,10 +74,25 @@
                             </button>
                             <progressView opaque="NO" contentMode="scaleToFill" verticalHuggingPriority="750" progress="0.5" translatesAutoresizingMaskIntoConstraints="NO" id="B9v-HD-fAS">
                                 <rect key="frame" x="0.0" y="59" width="393" height="5"/>
+                                <color key="tintColor" red="0.1374283731" green="0.1156309769" blue="0.37209385630000003" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                                 <constraints>
                                     <constraint firstAttribute="height" constant="5" id="TWp-uM-6iT"/>
                                 </constraints>
                             </progressView>
+                            <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="upH-i0-qbL">
+                                <rect key="frame" x="16" y="753" width="50" height="50"/>
+                                <constraints>
+                                    <constraint firstAttribute="width" constant="50" id="QJM-Z6-V9I"/>
+                                    <constraint firstAttribute="height" constant="50" id="WMT-Tr-t28"/>
+                                </constraints>
+                                <state key="normal" title="Button"/>
+                                <buttonConfiguration key="configuration" style="plain" image="square.and.arrow.up" catalog="system">
+                                    <preferredSymbolConfiguration key="preferredSymbolConfigurationForImage" configurationType="pointSize" pointSize="25" weight="semibold"/>
+                                </buttonConfiguration>
+                                <connections>
+                                    <action selector="exportButtonPressed:" destination="BYZ-38-t0r" eventType="touchUpInside" id="Gu8-33-P7k"/>
+                                </connections>
+                            </button>
                         </subviews>
                         <viewLayoutGuide key="safeArea" id="6Tk-OE-BBY"/>
                         <color key="backgroundColor" systemColor="systemBackgroundColor"/>
@@ -86,8 +101,10 @@
                             <constraint firstItem="uKh-4C-Ry6" firstAttribute="bottom" secondItem="6Tk-OE-BBY" secondAttribute="bottom" id="AAf-VS-6Ly"/>
                             <constraint firstItem="B9v-HD-fAS" firstAttribute="trailing" secondItem="6Tk-OE-BBY" secondAttribute="trailing" id="Ild-kg-iNy"/>
                             <constraint firstItem="dSY-2f-fmA" firstAttribute="top" secondItem="6Tk-OE-BBY" secondAttribute="top" constant="8" id="L9o-1Q-b1N"/>
+                            <constraint firstItem="uKh-4C-Ry6" firstAttribute="centerY" secondItem="upH-i0-qbL" secondAttribute="centerY" id="UeZ-BB-2iE"/>
                             <constraint firstItem="B9v-HD-fAS" firstAttribute="leading" secondItem="6Tk-OE-BBY" secondAttribute="leading" id="VZg-zB-s9J"/>
                             <constraint firstItem="dTh-5S-2nu" firstAttribute="top" secondItem="dSY-2f-fmA" secondAttribute="bottom" constant="8" id="ZZb-0w-v5F"/>
+                            <constraint firstItem="upH-i0-qbL" firstAttribute="leading" secondItem="6Tk-OE-BBY" secondAttribute="leading" constant="16" id="Zwz-th-qBP"/>
                             <constraint firstItem="dSY-2f-fmA" firstAttribute="trailing" secondItem="6Tk-OE-BBY" secondAttribute="trailing" id="czv-0l-owt"/>
                             <constraint firstItem="dTh-5S-2nu" firstAttribute="trailing" secondItem="6Tk-OE-BBY" secondAttribute="trailing" id="uYo-gA-Ti3"/>
                             <constraint firstItem="uKh-4C-Ry6" firstAttribute="top" secondItem="dTh-5S-2nu" secondAttribute="bottom" constant="12" id="yCI-iF-9BX"/>
@@ -110,6 +127,7 @@
     </scenes>
     <resources>
         <image name="record.circle" catalog="system" width="128" height="123"/>
+        <image name="square.and.arrow.up" catalog="system" width="110" height="128"/>
         <systemColor name="systemBackgroundColor">
             <color white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
         </systemColor>

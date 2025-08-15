@@ -8,12 +8,48 @@
 import AVFoundation
 import Accelerate
 
-final class SimpleAnalyzer: FrameAnalyzer {
+// MARK: - Analyzer protocol (you can supply your own)
+public protocol FrameAnalyzer: Analayzer {
+    /// Called off the main thread on the analysis queue.
+    func analyzeFrame(pixelBuffer: CVPixelBuffer, time: CMTime) -> VideoAnalysis?
+} // FrameAnalyzer
 
+// MARK: - Analysis payload
+public struct VideoAnalysis {
+    /// Average scene brightness in [0, 1] (0 = dark, 1 = bright)
+    public let averageLuma: Float
+    /// Approx motion magnitude in [0, 1] (heuristic, 0 = static)
+    public let motion: Float
+    public let time: CMTime
+  
+} // VideoAnalysis
+
+final class SimpleAnalyzer: FrameAnalyzer {
+  
     private var lastSample: [UInt8] = []
     private let sampleStep = 8 // sample every Nth pixel per row/col to reduce work
 
-    func analyze(pixelBuffer: CVPixelBuffer, time: CMTime) -> VideoAnalysis? {
+  func didPass(pixelBuffer: CVPixelBuffer, time: CMTime) -> Bool {
+    // color the box based on brightness/motion.
+    // averageLuma ~0..1, motion ~0..1
+    let videoAnalysis = analyzeFrame(pixelBuffer: pixelBuffer, time: time)
+    
+    guard let averageLuma = videoAnalysis?.averageLuma,
+          let motion = videoAnalysis?.motion else {
+      return false
+    }
+    
+    //uncomment for real-time values:
+    //    print("averageLuma: \(analysis.averageLuma), motion: \(analysis.motion)")
+    let tooDark = averageLuma < 0.25
+    let tooBright = averageLuma > 0.75
+    let noMotion = motion < 0.05
+    let didPass = !tooDark && !tooBright && noMotion
+    return didPass
+    
+  }
+  
+    func analyzeFrame(pixelBuffer: CVPixelBuffer, time: CMTime) -> VideoAnalysis? {
         CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
 

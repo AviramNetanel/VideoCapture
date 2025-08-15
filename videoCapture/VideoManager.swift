@@ -9,42 +9,17 @@ import AVFoundation
 import UIKit
 
 
-// MARK: - Analyzer protocol (you can supply your own)
-public protocol FrameAnalyzer: AnyObject {
-    /// Called off the main thread on the analysis queue.
-    func analyze(pixelBuffer: CVPixelBuffer, time: CMTime) -> VideoAnalysis?
-} // FrameAnalyzer
+public protocol Analayzer {
+  func didPass(pixelBuffer: CVPixelBuffer, time: CMTime) -> Bool
+}
 
 // MARK: - Manager delegate
 public protocol VideoManagerDelegate: AnyObject {
-    func videoManager(_ manager: VideoManager, didUpdate analysis: VideoAnalysis)
+    func videoManager(_ manager: VideoManager, didPassAnalysis: Bool)
     func videoManager(_ manager: VideoManager, didChangeRecording isRecording: Bool)
     func videoManager(_ manager: VideoManager, didFinishRecordingTo url: URL)
     func videoManager(_ manager: VideoManager, didFail error: Error)
 } // VideoManagerDelegate
-
-// MARK: - Analysis payload
-public struct VideoAnalysis {
-    /// Average scene brightness in [0, 1] (0 = dark, 1 = bright)
-    public let averageLuma: Float
-    /// Approx motion magnitude in [0, 1] (heuristic, 0 = static)
-    public let motion: Float
-    public let time: CMTime
-  
-  func didPass() -> Bool {
-    // color the box based on brightness/motion.
-    // averageLuma ~0..1, motion ~0..1
-    let tooDark = self.averageLuma < 0.15
-    let tooBright = self.averageLuma > 0.85
-    let noMotion = self.motion < 0.05
-    
-    //uncomment for real-time values:
-//    print("averageLuma: \(analysis.averageLuma), motion: \(analysis.motion)")
-    
-    let didPass = !tooDark && !tooBright && noMotion
-    return didPass
-  }
-} // VideoAnalysis
 
 
 // MARK: - VideoManager
@@ -53,7 +28,7 @@ public final class VideoManager: NSObject {
     // Public
     public weak var delegate: VideoManagerDelegate?
     public let session = AVCaptureSession()
-    public var maxDuration: TimeInterval = 30 { didSet { movieOutput.maxRecordedDuration = CMTime(seconds: maxDuration, preferredTimescale: 1) } }
+    public var maxDuration: TimeInterval { didSet { movieOutput.maxRecordedDuration = CMTime(seconds: maxDuration, preferredTimescale: 1) } }
 
     /// Throttle analysis to this FPS to keep CPU/GPU happy.
     public var analysisFPS: Double = 15
@@ -74,10 +49,11 @@ public final class VideoManager: NSObject {
     private var lastAnalysisTime: CMTime = .negativeInfinity
 
     // Lifecycle
-    public override init() {
-        super.init()
-        session.sessionPreset = .high
-    }
+  public init(maxVideoDuration: TimeInterval) {
+    maxDuration = maxVideoDuration
+    super.init()
+    session.sessionPreset = .high
+  }
 
     // MARK: - Permissions + Configure
   public func startSession() {
@@ -295,12 +271,13 @@ extension VideoManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         lastAnalysisTime = time
 
         // Run analysis off the main thread (we're already on analysisQueue)
-        if let result = analyzer.analyze(pixelBuffer: buffer, time: time) {
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.delegate?.videoManager(self, didUpdate: result)
-            }
-        }
+      let result = analyzer.didPass(pixelBuffer: buffer, time: time)
+      
+      Task(priority: .medium) { @MainActor [weak self] in
+        guard let self else { return }
+        self.delegate?.videoManager(self, didPassAnalysis: result)
+      }
+        
     } // captureOutput didOutput
 } // VideoDataOutput delegate
 
@@ -345,11 +322,10 @@ extension VideoManager {
         Task.detached { [weak self] in
             guard let self else { return }
             do {
-                // iOS 16+: async duration load
                 let dur = try await asset.load(.duration)
                 let seconds = CMTimeGetSeconds(dur)
 
-                // Snapshot metrics (thread-safe)
+                // Snpshot metrics (thread-safe)
                 var wasGreen = false
                 var greenSecs: CFTimeInterval = 0
                 await withCheckedContinuation { cont in

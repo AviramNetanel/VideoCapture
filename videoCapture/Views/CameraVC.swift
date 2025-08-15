@@ -15,14 +15,15 @@ struct LocalVideo {
   var duration: TimeInterval?  // filled in asynchronously
 }
 
+//MARK: Constants
+private let maxVideoDuration = 30.0
+private let analysisFPS = 15.0
+private let imageCellSize = CGSize(width: 100, height: 100)
+
+
 //MARK: -
 
 class CameraViewController: UIViewController {
-  
-  //MARK: Constants
-  private let maxVideoDuration = 30.0
-  private let analysisFPS = 15.0
-  private let imageCellSize = CGSize(width: 100, height: 100)
   
   // MARK:  properties
   private let session = AVCaptureSession()
@@ -31,14 +32,14 @@ class CameraViewController: UIViewController {
   private let movieOutput = AVCaptureMovieFileOutput()
   private var videoPreviewView = VideoPreviewView()
   
-  private var isRecording: Bool = false
+  var isRecording: Bool = false
   private var isObservingPhotoLibrary = false
   private var isSessionConfigured = false
   private var elapsedTime: TimeInterval = 0.0
   private var timer: Timer?
   
   // Video Manager
-  let videoManager = VideoManager()
+  let videoManager = VideoManager(maxVideoDuration: maxVideoDuration)
   private let analyzer = SimpleAnalyzer()
   
   // MARK: grid state
@@ -240,9 +241,14 @@ class CameraViewController: UIViewController {
           setRecordingUI(isRecording: true)
           startProgressAnimation()
           let url = VideoStore.newRecordingURL()    // your local storage helper
-          videoManager.startRecording(to: url)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+          self.videoManager.startRecording(to: url)
+        }
       }
     self.isRecording.toggle()
+        
+    SoundPlayer.shared.playSound(sound: .click, ext: "wav")
+    UISelectionFeedbackGenerator().selectionChanged()
   } // toggleRecording
   
   func setRecordingUI(isRecording: Bool) {
@@ -264,39 +270,54 @@ class CameraViewController: UIViewController {
   }
   
   func startProgressAnimation(){
+    timer?.invalidate()
     progressBar.isHidden = false
     elapsedTime = 0.0
     progressBar.progress = 0.0
-    
-    timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] t in
+    let interval = 0.15
+    timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] t in
       guard let self = self else { return }
-      self.elapsedTime += 0.05
-      let progress = Float(self.elapsedTime / self.maxVideoDuration)
+      self.elapsedTime += interval
+      let progress = Float(self.elapsedTime / maxVideoDuration)
       self.progressBar.setProgress(min(progress, 1.0), animated: true)
+      print("time elapsed \(self.elapsedTime)")
       
-      if self.elapsedTime >= self.maxVideoDuration {
+      if !isRecording {
         t.invalidate()
       }
     }
   }
+  
+  
+  @IBAction func exportButtonPressed(_ sender: Any) {
+    shareAllMetadataJSON()
+  }
+  
+  func shareAllMetadataJSON() {
+      let dir = VideoStore.directoryURL
+      let urls = (try? FileManager.default.contentsOfDirectory(at: dir,
+                                                               includingPropertiesForKeys: nil,
+                                                               options: [.skipsHiddenFiles]))?
+          .filter { $0.pathExtension.lowercased() == "json" } ?? []
+
+      guard !urls.isEmpty else {
+          let a = UIAlertController(title: "No Metadata Files",
+                                    message: "There are no .json files to share.",
+                                    preferredStyle: .alert)
+          a.addAction(UIAlertAction(title: "OK", style: .default))
+          present(a, animated: true)
+          return
+      }
+
+      let share = UIActivityViewController(activityItems: urls, applicationActivities: nil)
+      present(share, animated: true)
+  } // shareAllMetadataJSON
+  
 }//CameraViewController
 
 // MARK: - AVCaptureFileOutputRecordingDelegate
-extension CameraViewController: AVCaptureFileOutputRecordingDelegate {
-  func fileOutput(_ output: AVCaptureFileOutput,
-                  didFinishRecordingTo outputFileURL: URL,
-                  from connections: [AVCaptureConnection],
-                  error: Error?) {
-
-      DispatchQueue.main.async { [weak self] in
-          self?.setRecordingUI(isRecording: false)
-          if let avErr = error as? AVError, avErr.code == .maximumDurationReached {
-//              self?.stopProgressDepletion(finalizeToEmpty: true)
-          }
-          // Refresh the gallery of local files
-          self?.reloadLocalVideos()
-      }
-  } // fileOutput didFinishRecordingTo
+extension CameraViewController {
+  
   
   //MARK: -
 //  func thumbnail(for url: URL, targetPixels: CGSize, completion: @escaping (UIImage?) -> Void) {
@@ -433,6 +454,10 @@ extension CameraViewController: UICollectionViewDataSource, UICollectionViewDele
       let point = gr.location(in: savedVideosCollection)
       guard let indexPath = savedVideosCollection.indexPathForItem(at: point) else { return }
 
+    
+    let generator = UIImpactFeedbackGenerator(style: .medium)
+    generator.impactOccurred()
+    
       let item = localVideos[indexPath.item]
       let cell = savedVideosCollection.cellForItem(at: indexPath)
 
@@ -455,6 +480,8 @@ extension CameraViewController: UICollectionViewDataSource, UICollectionViewDele
       // Nice haptic on trigger
       UIImpactFeedbackGenerator(style: .medium).impactOccurred()
       present(alert, animated: true)
+    
+    SoundPlayer.shared.playSound(sound: .click, ext: "wav")
   }
   
   private func deleteVideo(at indexPath: IndexPath) {
@@ -477,5 +504,8 @@ extension CameraViewController: UICollectionViewDataSource, UICollectionViewDele
     }
   }
 
+  
+  
+  
 } // UICollectionViewDataSource/Delegate
 

@@ -8,10 +8,9 @@
 import UIKit
 
 extension CameraViewController: VideoManagerDelegate {
-  func videoManager(_ manager: VideoManager, didUpdate analysis: VideoAnalysis) {
+  func videoManager(_ manager: VideoManager, didPassAnalysis: Bool) {
     // Called on main thread.
 
-    let didPassAnalysis = analysis.didPass()
     let color = didPassAnalysis ? UIColor.systemGreen : UIColor.systemRed
         
     videoManager.setGreenState(didPassAnalysis)
@@ -21,6 +20,7 @@ extension CameraViewController: VideoManagerDelegate {
   
   func videoManager(_ manager: VideoManager, didChangeRecording isRecording: Bool) {
     // Keep UI in sync with actual start/stop
+    self.isRecording = isRecording
     if isRecording {
       setRecordingUI(isRecording: true)
       startProgressAnimation()
@@ -31,6 +31,7 @@ extension CameraViewController: VideoManagerDelegate {
   
   func videoManager(_ manager: VideoManager, didFinishRecordingTo url: URL) {
     // Update gallery of local files
+    isRecording = false
     stopProgressAnimation()
     reloadLocalVideos()
   } // didFinishRecordingTo
@@ -38,5 +39,6 @@ extension CameraViewController: VideoManagerDelegate {
   func videoManager(_ manager: VideoManager, didFail error: Error) {
     // Show an alert or inline message
     print("Video error:", error.localizedDescription)
+    self.isRecording = false
   } // didFail
 } // VideoManagerDelegate
