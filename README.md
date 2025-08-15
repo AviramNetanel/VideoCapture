@@ -51,3 +51,4 @@ Post-Capture Metadata Generation:
 - code separation - split the code into smaller chuncks / files
 - better UX: more sounds, and haptic feedback
 - share / export video
+- advanced logger
